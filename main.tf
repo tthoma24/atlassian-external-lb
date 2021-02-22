@@ -13,3 +13,4 @@ resource "aws_eip" "app_us_east_1d" {
   tags = {
     "Name" = "app_us_east_1d"
   }
+}
