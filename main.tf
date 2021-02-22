@@ -48,3 +48,31 @@ resource "aws_lb_target_group" "jira_public_443" {
   vpc_id            = var.vpc_id
   proxy_protocol_v2 = false
 }
+
+resource "aws_lb_listener" "jira_public_80" {
+  load_balancer_arn = "${aws_lb.jira_public.arn}"
+  port              = "80"
+  protocol          = "TCP"
+
+  default_action {
+    type	 = "redirect"
+
+    redirect {
+      port          = "443"
+      protocol      = "TCP"
+      status_code   = "HTTP_301"
+    }
+  }
+}
+
+resource "aws_lb_listener" "jira_public_443" {
+  load_balancer_arn = "${aws_lb.jira_public.arn}"
+  port              = "443"
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = "${aws_lb_target_group.jira_public_443.arn}"
+  }
+}
+
