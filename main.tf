@@ -34,7 +34,7 @@ resource "aws_lb" "jira_public" {
 
   subnet_mapping {
     subnet_id     = var.public_subnet_us_east_1c
-    allocation_id = aws_eip.jira-public_us_east_1a.ic
+    allocation_id = aws_eip.jira-public_us_east_1c.id
   }
 
   subnet_mapping {
@@ -50,7 +50,7 @@ resource "aws_lb" "confluence_public" {
 
   subnet_mapping {
     subnet_id     = var.public_subnet_us_east_1c
-    allocation_id = aws_eip.confluence-public_us_east_1a.ic
+    allocation_id = aws_eip.confluence-public_us_east_1c.id
   }
 
   subnet_mapping {
