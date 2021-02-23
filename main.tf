@@ -185,3 +185,23 @@ resource "aws_lambda_function" "jira_public_lb_updater_443" {
     }
   }
 }
+
+resource "aws_cloudwatch_event_rule" "cron_minute" {
+  name                = "cron-minute"
+  schedule_expression = "rate(1 minute)"
+  is_enabled          = true
+}
+
+resource "aws_cloudwatch_event_target" "jira_public_lb_updater_443" {
+  rule      = "${aws_cloudwatch_event_rule.cron_minute.name}"
+  target_id = "TriggerStaticPort443"
+  arn       = "${aws_lambda_function.jira_public_lb_updater_443.arn}"
+}
+
+resource "aws_lambda_permission" "allow_cloudwatch_443" {
+  statement_id  = "AllowExecutionFromCloudWatch"
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.jira_public_lb_updater_443.function_name}"
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.cron_minute.arn
+}
