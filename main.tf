@@ -15,6 +15,18 @@ resource "aws_eip" "jira-public_us_east_1d" {
   }
 }
 
+resource "aws_eip" "confluence-public_us_east_1c" {
+  tags = {
+    "Name" = "confluence-public_us_east_1c"
+  }
+}
+
+resource "aws_eip" "confluence-public_us_east_1d" {
+  tags = {
+    "Name" = "confluence-public_us_east_1d"
+  }
+}
+
 resource "aws_lb" "jira_public" {
   name                       = "jira-public"
   load_balancer_type         = "network"
@@ -28,6 +40,22 @@ resource "aws_lb" "jira_public" {
   subnet_mapping {
     subnet_id     = var.public_subnet_us_east_1d
     allocation_id = aws_eip.jira-public_us_east_1d.id
+  }
+}
+
+resource "aws_lb" "confluence_public" {
+  name                       = "confluence-public"
+  load_balancer_type         = "network"
+  internal                   = false
+
+  subnet_mapping {
+    subnet_id     = var.public_subnet_us_east_1c
+    allocation_id = aws_eip.confluence-public_us_east_1a.ic
+  }
+
+  subnet_mapping {
+    subnet_id     = var.public_subnet_us_east_1d
+    allocation_id = aws_eip.confluence-public_us_east_1d.id
   }
 }
 
@@ -67,6 +95,42 @@ resource "aws_lb_listener" "jira_public_443" {
   }
 }
 
+resource "aws_lb_target_group" "confluence_public_443" {
+  name              = "confluence-public-443"
+  port              = 443
+  protocol          = "TCP"
+  target_type       = "ip"
+  vpc_id            = var.vpc_id
+  proxy_protocol_v2 = false
+}
+
+resource "aws_lb_listener" "confluence_public_80" {
+  load_balancer_arn = "${aws_lb.confluence_public.arn}"
+  port              = "80"
+  protocol          = "TCP"
+
+  default_action {
+    type         = "redirect"
+
+    redirect {
+      port          = "443"
+      protocol      = "TCP"
+      status_code   = "HTTP_301"
+    }
+  }
+}
+
+resource "aws_lb_listener" "confluence_public_443" {
+  load_balancer_arn = "${aws_lb.confluence_public.arn}"
+  port              = "443"
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = "${aws_lb_target_group.confluence_public_443.arn}"
+  }
+}
+
 resource "aws_s3_bucket" "jira_public_lb" {
   bucket = "bh-jira-public-lb"
   acl    = "private"
@@ -77,9 +141,19 @@ resource "aws_s3_bucket" "jira_public_lb" {
   }
 }
 
-resource "aws_iam_role_policy" "jira_public_lb_lambda" {
-  name = "jira-public-lb-lambda"
-  role = aws_iam_role.jira_public_lb_lambda.id
+resource "aws_s3_bucket" "confluence_public_lb" {
+  bucket = "bh-confluence-public-lb"
+  acl    = "private"
+  region = "us-east-1"
+
+  versioning {
+    enabled = true
+  }
+}
+
+resource "aws_iam_role_policy" "atlassian_public_lb_lambda" {
+  name = "atlassian-public-lb-lambda"
+  role = aws_iam_role.atlassian_public_lb_lambda.id
 
   policy = <<EOF
 {
@@ -103,7 +177,8 @@ resource "aws_iam_role_policy" "jira_public_lb_lambda" {
         "s3:PutObject"
       ],
       "Resource": [
-        "${aws_s3_bucket.jira_public_lb.arn}/*"
+        "${aws_s3_bucket.jira_public_lb.arn}/*",
+	"${aws_s3_bucket.confluence_public_lb.arn}/*"
       ],
       "Effect": "Allow",
       "Sid": "S3"
@@ -114,7 +189,8 @@ resource "aws_iam_role_policy" "jira_public_lb_lambda" {
         "elasticloadbalancing:DeregisterTargets"
       ],
       "Resource": [
-        "${aws_lb_target_group.jira_public_443.arn}"
+        "${aws_lb_target_group.jira_public_443.arn}",
+	"${aws_lb_target_group.confluence_public_443.arn}"
       ],
       "Effect": "Allow",
       "Sid": "ChangeTargetGroups"
@@ -140,8 +216,8 @@ resource "aws_iam_role_policy" "jira_public_lb_lambda" {
 EOF
 }
 
-resource "aws_iam_role" "jira_public_lb_lambda" {
-  name        = "jira-public-lb-lambda"
+resource "aws_iam_role" "atlassian_public_lb_lambda" {
+  name        = "atlassian-public-lb-lambda"
   description = "Managed by Terraform"
 
   assume_role_policy = <<EOF
@@ -164,7 +240,7 @@ EOF
 resource "aws_lambda_function" "jira_public_lb_updater_443" {
   filename      = "lambda_function.zip"
   function_name = "jira_public_lb_updater_443"
-  role          = "${aws_iam_role.jira_public_lb_lambda.arn}"
+  role          = "${aws_iam_role.atlassian_public_lb_lambda.arn}"
   handler       = "populate_NLB_TG_with_ALB.lambda_handler"
 
   source_code_hash = "${filebase64sha256("lambda_function.zip")}"
@@ -175,7 +251,7 @@ resource "aws_lambda_function" "jira_public_lb_updater_443" {
 
   environment {
     variables = {
-      ALB_DNS_NAME                      = var.alb_dns_name
+      ALB_DNS_NAME                      = var.jira_alb_dns_name
       ALB_LISTENER                      = "443"
       S3_BUCKET                         = aws_s3_bucket.jira_public_lb.id
       NLB_TG_ARN                        = aws_lb_target_group.jira_public_443.arn
@@ -194,7 +270,7 @@ resource "aws_cloudwatch_event_rule" "cron_minute" {
 
 resource "aws_cloudwatch_event_target" "jira_public_lb_updater_443" {
   rule      = "${aws_cloudwatch_event_rule.cron_minute.name}"
-  target_id = "TriggerStaticPort443"
+  target_id = "TriggerJiraPublicPort443"
   arn       = "${aws_lambda_function.jira_public_lb_updater_443.arn}"
 }
 
@@ -202,6 +278,45 @@ resource "aws_lambda_permission" "allow_cloudwatch_443" {
   statement_id  = "AllowExecutionFromCloudWatch"
   action        = "lambda:InvokeFunction"
   function_name = "${aws_lambda_function.jira_public_lb_updater_443.function_name}"
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.cron_minute.arn
+}
+
+resource "aws_lambda_function" "confluence_public_lb_updater_443" {
+  filename      = "lambda_function.zip"
+  function_name = "confluence_public_lb_updater_443"
+  role          = "${aws_iam_role.atlassian_public_lb_lambda.arn}"
+  handler       = "populate_NLB_TG_with_ALB.lambda_handler"
+
+  source_code_hash = "${filebase64sha256("lambda_function.zip")}"
+
+  runtime     = "python2.7"
+  memory_size = 128
+  timeout     = 300
+
+  environment {
+    variables = {
+      ALB_DNS_NAME                      = var.confluence_alb_dns_name
+      ALB_LISTENER                      = "443"
+      S3_BUCKET                         = aws_s3_bucket.confluence_public_lb.id
+      NLB_TG_ARN                        = aws_lb_target_group.confluence_public_443.arn
+      MAX_LOOKUP_PER_INVOCATION         = 50
+      INVOCATIONS_BEFORE_DEREGISTRATION = 10
+      CW_METRIC_FLAG_IP_COUNT           = true
+    }
+  }
+}
+
+resource "aws_cloudwatch_event_target" "confluence_public_lb_updater_443" {
+  rule      = "${aws_cloudwatch_event_rule.cron_minute.name}"
+  target_id = "TriggerConfluencePublicPort443"
+  arn       = "${aws_lambda_function.confluence_public_lb_updater_443.arn}"
+}
+
+resource "aws_lambda_permission" "allow_cloudwatch_443" {
+  statement_id  = "AllowExecutionFromCloudWatch"
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.confluence_public_lb_updater_443.function_name}"
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.cron_minute.arn
 }

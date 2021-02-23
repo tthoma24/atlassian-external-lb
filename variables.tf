@@ -15,6 +15,10 @@ variable "public_subnet_us_east_1d" {
   type = string
 }
 
-variable "alb_dns_name" {
+variable "jira_alb_dns_name" {
+  type = string
+}
+
+variable "confluence_alb_dns_name" {
   type = string
 }
