@@ -274,7 +274,7 @@ resource "aws_cloudwatch_event_target" "jira_public_lb_updater_443" {
   arn       = "${aws_lambda_function.jira_public_lb_updater_443.arn}"
 }
 
-resource "aws_lambda_permission" "allow_cloudwatch_443" {
+resource "aws_lambda_permission" "jira_cloudwatch_443" {
   statement_id  = "AllowExecutionFromCloudWatch"
   action        = "lambda:InvokeFunction"
   function_name = "${aws_lambda_function.jira_public_lb_updater_443.function_name}"
@@ -313,7 +313,7 @@ resource "aws_cloudwatch_event_target" "confluence_public_lb_updater_443" {
   arn       = "${aws_lambda_function.confluence_public_lb_updater_443.arn}"
 }
 
-resource "aws_lambda_permission" "allow_cloudwatch_443" {
+resource "aws_lambda_permission" "confluence_cloudwatch_443" {
   statement_id  = "AllowExecutionFromCloudWatch"
   action        = "lambda:InvokeFunction"
   function_name = "${aws_lambda_function.confluence_public_lb_updater_443.function_name}"
