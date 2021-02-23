@@ -31,15 +31,6 @@ resource "aws_lb" "jira_public" {
   }
 }
 
-resource "aws_lb_target_group" "jira_public_80" {
-  name              = "jira-public-80"
-  port              = 80
-  protocol          = "TCP"
-  target_type       = "ip"
-  vpc_id            = var.vpc_id
-  proxy_protocol_v2 = false
-}
-
 resource "aws_lb_target_group" "jira_public_443" {
   name              = "jira-public-443"
   port              = 443
@@ -76,8 +67,8 @@ resource "aws_lb_listener" "jira_public_443" {
   }
 }
 
-resource "aws_s3_bucket" "jira_static_lb" {
-  bucket = "bh-jira-static-lb"
+resource "aws_s3_bucket" "jira_public_lb" {
+  bucket = "bh-jira-public-lb"
   acl    = "private"
   region = "us-east-1"
 
@@ -86,9 +77,9 @@ resource "aws_s3_bucket" "jira_static_lb" {
   }
 }
 
-resource "aws_iam_role_policy" "jira_static_lb_lambda" {
-  name = "jira_static-lb-lambda"
-  role = aws_iam_role.jira_static_lb_lambda.id
+resource "aws_iam_role_policy" "jira_public_lb_lambda" {
+  name = "jira-public-lb-lambda"
+  role = aws_iam_role.jira_public_lb_lambda.id
 
   policy = <<EOF
 {
@@ -112,7 +103,7 @@ resource "aws_iam_role_policy" "jira_static_lb_lambda" {
         "s3:PutObject"
       ],
       "Resource": [
-        "${aws_s3_bucket.static_lb.arn}/*"
+        "${aws_s3_bucket.jira_public_lb.arn}/*"
       ],
       "Effect": "Allow",
       "Sid": "S3"
@@ -123,7 +114,6 @@ resource "aws_iam_role_policy" "jira_static_lb_lambda" {
         "elasticloadbalancing:DeregisterTargets"
       ],
       "Resource": [
-        "${aws_lb_target_group.jira_public_80.arn}",
         "${aws_lb_target_group.jira_public_443.arn}"
       ],
       "Effect": "Allow",
@@ -150,8 +140,8 @@ resource "aws_iam_role_policy" "jira_static_lb_lambda" {
 EOF
 }
 
-resource "aws_iam_role" "jira_static_lb_lambda" {
-  name        = "jira-static-lb-lambda"
+resource "aws_iam_role" "jira_public_lb_lambda" {
+  name        = "jira-public-lb-lambda"
   description = "Managed by Terraform"
 
   assume_role_policy = <<EOF
@@ -171,3 +161,27 @@ resource "aws_iam_role" "jira_static_lb_lambda" {
 EOF
 }
 
+resource "aws_lambda_function" "jira_public_lb_updater_443" {
+  filename      = "lambda_function.zip"
+  function_name = "jira_public_lb_updater_443"
+  role          = "${aws_iam_role.jira_public_lb_lambda.arn}"
+  handler       = "populate_NLB_TG_with_ALB.lambda_handler"
+
+  source_code_hash = "${filebase64sha256("lambda_function.zip")}"
+
+  runtime     = "python2.7"
+  memory_size = 128
+  timeout     = 300
+
+  environment {
+    variables = {
+      ALB_DNS_NAME                      = var.alb_dns_name
+      ALB_LISTENER                      = "443"
+      S3_BUCKET                         = aws_s3_bucket.jira_public_lb.id
+      NLB_TG_ARN                        = aws_lb_target_group.jira_public_443.arn
+      MAX_LOOKUP_PER_INVOCATION         = 50
+      INVOCATIONS_BEFORE_DEREGISTRATION = 10
+      CW_METRIC_FLAG_IP_COUNT           = true
+    }
+  }
+}
