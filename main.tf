@@ -78,7 +78,7 @@ resource "aws_lb_listener" "jira_public_80" {
 
     redirect {
       port          = "443"
-      protocol      = "TCP"
+      protocol      = "HTTPS"
       status_code   = "HTTP_301"
     }
   }
@@ -114,7 +114,7 @@ resource "aws_lb_listener" "confluence_public_80" {
 
     redirect {
       port          = "443"
-      protocol      = "TCP"
+      protocol      = "HTTPS"
       status_code   = "HTTP_301"
     }
   }
