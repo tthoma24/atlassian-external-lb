@@ -259,7 +259,7 @@ resource "aws_lambda_function" "confluence_public_lb_updater_443" {
   source_code_hash = "${filebase64sha256("lambda_function.zip")}"
 
   runtime     = "python2.7"
-  memory_size = 128
+  memory_size = 192
   timeout     = 300
 
   environment {
