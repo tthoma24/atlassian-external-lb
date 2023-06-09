@@ -1,0 +1,3 @@
+[submodule "lambda_function"]
+	path = lambda_function
+	url = https://github.com/tthoma24/static-alb-lambda.git
